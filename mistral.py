@@ -1,30 +1,36 @@
 import streamlit as st
-from mistralai.client import MistralClient
-import json
+import threading
+import time
+import requests
+from fastapi import FastAPI
+from pydantic import BaseModel
+from mistralai import Mistral
+import uvicorn
 
-# 🔒 API açarı (TƏHLÜKƏSİZ SAXLA!)
+# Mistral AI üçün API açarı
 API_KEY = "ngG4tVdtsCNoLmSgXhNXq3VCjj5wlfIG"
 MODEL = "mistral-small-latest"
 
-# Mistral müştərisini yaradın
-client = MistralClient(api_key=API_KEY)
+client = Mistral(api_key=API_KEY)
 
-st.title("🔍 CV and Job Description Matching!")
+# FastAPI tətbiqi
+app = FastAPI()
 
-cv_text = st.text_area("📌 CV Section:", height=200)
-job_text = st.text_area("📌 Job Description Section:", height=200)
+class CVRequest(BaseModel):
+    cv_text: str
+    job_text: str
 
-# ✅ AI Request Göndərmək üçün Funksiya
-def process_request(cv, job):
+@app.post("/match_cv")
+async def match_cv(request: CVRequest):
     matching_prompt = f"""
     You are an AI assistant specialized in evaluating CVs against job descriptions.
     Your task is to analyze the provided CV and job description and determine how well they match.
 
     ### CV:
-    {cv}
+    {request.cv_text}
 
     ### Job Description:
-    {job}
+    {request.job_text}
 
     Your response must include:
     - **MatchScore**: A percentage (0-100) indicating how well the CV matches the job description.
@@ -35,28 +41,43 @@ def process_request(cv, job):
     Ensure the output is structured and provides clear insights into the match between the CV and the job description.
     """
 
-    # 🔹 Yeni versiyada `ChatMessage` yoxdur, dict istifadə edirik
-    messages = [
-        {"role": "system", "content": "You are a job matching AI."},
-        {"role": "user", "content": matching_prompt}
-    ]
+    try:
+        response = client.chat.complete(
+            model=MODEL,
+            messages=[{"role": "system", "content": matching_prompt}]
+        )
 
-    response = client.chat(model=MODEL, messages=messages)
-    return response.choices[0].message.content
+        result = response.choices[0].message.content
+        return {"match_result": result}
 
-# 🔹 API ilə GET request üçün URL dəstəyi əlavə edirik
-params = st.experimental_get_query_params()
-cv_param = params.get("cv", [""])[0]
-job_param = params.get("job", [""])[0]
+    except Exception as e:
+        return {"error": str(e)}
 
-if cv_param and job_param:
-    ai_response = process_request(cv_param, job_param)
-    st.json({"response": ai_response})
+# FastAPI serverini ayrıca bir thread-də işə salırıq
+def run_fastapi():
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
-# 🔘 UI düyməsi (Əl ilə işlətmək üçün)
-if st.button("🔎 Check Matching"):
+threading.Thread(target=run_fastapi, daemon=True).start()
+
+time.sleep(2)  # FastAPI serverinin tam başladığından əmin olmaq üçün gözləmə
+
+
+# 🌟 STREAMLIT UI 
+st.title("🔍 CV and Job Description Matcher")
+
+cv_text = st.text_area("📌 CV Section", height=200)
+job_text = st.text_area("📌 Job Description Section", height=200)
+
+if st.button("🔎 Control the matching"):
     with st.spinner("AI is analyzing ..."):
-        ai_response = process_request(cv_text, job_text)
-        st.success("✅ Results")
-        st.text_area("🔹 AI Evaluation:", ai_response, height=300)
-        st.download_button("📥 Download the result", data=ai_response, file_name="matching_result.txt", mime="text/plain")
+        API_URL = "http://127.0.0.1:8000/match_cv"  # Lokal API çağırışı
+        response = requests.post(API_URL, json={"cv_text": cv_text, "job_text": job_text})
+
+        if response.status_code == 200:
+            result = response.json()["match_result"]
+            st.success("✅ Results")
+            st.text(result)
+
+            st.download_button("📥 Download the result", data=result, file_name="matching_result.txt", mime="text/plain")
+        else:
+            st.error("🚨 Error: Could not process the request!")
