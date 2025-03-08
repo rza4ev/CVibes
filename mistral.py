@@ -6,11 +6,6 @@ import json
 API_KEY = "ngG4tVdtsCNoLmSgXhNXq3VCjj5wlfIG"
 MODEL = "mistral-small-latest"
 
-
-# 🔒 Mistral API açarı
-API_KEY = "YOUR_MISTRAL_API_KEY"
-MODEL = "mistral-small-latest"
-
 client = MistralClient(api_key=API_KEY)
 
 st.title("🔍 CV and Job Description Matching!")
