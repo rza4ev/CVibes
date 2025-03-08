@@ -13,7 +13,7 @@ MODEL = "mistral-small-latest"
 
 client = MistralClient(api_key=API_KEY)
 
-st.title("🔍 CV and Job Description Matching")
+st.title("🔍 CV and Job Description Matching!")
 
 cv_text = st.text_area("📌 CV Section:", height=200)
 job_text = st.text_area("📌 Job Description Section:", height=200)
